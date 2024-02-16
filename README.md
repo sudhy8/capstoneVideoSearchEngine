@@ -35,4 +35,4 @@ Database: Vector DB
 Alisha Thomas |
 Aswathy Anilkumar |
 Jasmin Joseph |
-Sudhy Sukumaran |
+Sudhy Sukumaran
