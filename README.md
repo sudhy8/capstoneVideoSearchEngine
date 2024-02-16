@@ -13,7 +13,9 @@ We chose this project to meet real-world scenarios such as personalizing media, 
 Tools Used:
 
 Front-end: React JS,HTML, CSS, Java Script
+
 Backend: Python
+
 Database: Vector DB
 
 
