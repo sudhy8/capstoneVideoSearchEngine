@@ -5,7 +5,7 @@ The visual search engine retrieves videos or images based on descriptive caption
 
 The Need of our project:
      
-     We chose this project to meet real-world scenarios such as personalizing media, retrieving the required image from each one’s gallery, or a backup drive while glimpsing old memories or requiring important information and providing security for traffic management, adhering to traffic rules. It is very time-consuming to manually review video footage for retrieving information. The visual search engine processes the caption provided according to users’ needs and gives the desired output.
+We chose this project to meet real-world scenarios such as personalizing media, retrieving the required image from each one’s gallery, or a backup drive while glimpsing old memories or requiring important information and providing security for traffic management, adhering to traffic rules. It is very time-consuming to manually review video footage for retrieving information. The visual search engine processes the caption provided according to users’ needs and gives the desired output.
 
 
 
