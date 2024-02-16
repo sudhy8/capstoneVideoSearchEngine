@@ -14,7 +14,7 @@ We chose this project to meet real-world scenarios such as personalizing media, 
 
 Front-end: React JS,HTML, CSS, Java Script
 
-Backend: Python
+Backend: Python | Embedding Models -OpenAI CLIP/ Sentnace Transformer clip-ViT-B-32-multilingual-v1
 
 Database: Vector DB
 
