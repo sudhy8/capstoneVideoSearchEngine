@@ -20,7 +20,9 @@ Database: Vector DB
 Libraries used:
 
 *FFMPEG
+
 *Open CV
+
 *Pillow 
 
 
