@@ -48,21 +48,9 @@ def delete_file(bucket_name, object_name):
 
 
 @app.route("/")
-def hello_world():
-#     age = np.array([[6],[12],[18],[20],[36],[65]])
-#     arr_list = age.tolist()
-
-# # Serialize the list to JSON
-#     json_data = json.dumps(arr_list)
-    
+def upload():
     return upload_file('Moana.mp4', 'invideosearchbucket')
 
 @app.route("/delete")
-def hello_world2():
-#     age = np.array([[6],[12],[18],[20],[36],[65]])
-#     arr_list = age.tolist()
-
-# # Serialize the list to JSON
-#     json_data = json.dumps(arr_list)
-    
+def delete():
     return delete_file('invideosearchbucket','Moana.mp4')
