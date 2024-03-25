@@ -27,6 +27,15 @@ Database: Vector DB
 
 *Pillow 
 
+*OpenAI CLIP
+
+*S3 Bucket
+
+*Flask 
+
+
+
+
 
 
 
