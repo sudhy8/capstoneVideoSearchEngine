@@ -2,10 +2,17 @@ from flask import Flask
 import numpy as np
 from sklearn.preprocessing import Binarizer
 import json
-
+from flask import request
+import time
 import boto3
 
-
+from scenedetect import open_video, SceneManager, split_video_ffmpeg
+from scenedetect.detectors import ContentDetector
+from scenedetect.video_splitter import split_video_ffmpeg
+import cv2
+import random
+from PIL import Image
+import os
 
 from transformers import PreTrainedTokenizerFast, CLIPProcessor, CLIPModel
 import torch
@@ -22,14 +29,10 @@ model = CLIPModel.from_pretrained(model_id).to(device)
 tokenizer = PreTrainedTokenizerFast.from_pretrained(model_id)
 processor = CLIPProcessor.from_pretrained(model_id)
 
-with weaviate.connect_to_wcs(
-    cluster_url=os.getenv("WEAVIATE_CLUSTER_URL", "https://ccc-q2m6s9m3.weaviate.network"),
-    auth_credentials=weaviate.auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY", "imlIdfNFZ8eC6rm4iCvSrTJyQeoBo6KjQtLT"))
-) as client:
-    print(client.is_ready())
 
 
-    def img_embedder(images, names):
+
+def img_embedder(images, names):
         client.connect()
 
         batch_size = 16
@@ -69,20 +72,21 @@ with weaviate.connect_to_wcs(
             )
             print(uuid)
         print("Completed")
+        
 
 # img_embedder(images, names)
         
 
 
 # Specify your AWS credentials
-aws_access_key_id = 'AKIAXYKJWO4T5XRXMZ3A'
-aws_secret_access_key = 'ESjsmIjVA77qPIWtsE7AtljYR5Ri6rXFfAvw0iLo'
-aws_session_token = 'YOUR_SESSION_TOKEN'  # If applicable
-# Create an S3 client with your credentials
-s3 = boto3.client('s3', 
-                  aws_access_key_id=aws_access_key_id, 
-                  aws_secret_access_key=aws_secret_access_key, 
-                  )
+# aws_access_key_id = 'AKIAXYKJWO4T5XRXMZ3A'
+# aws_secret_access_key = 'ESjsmIjVA77qPIWtsE7AtljYR5Ri6rXFfAvw0iLo'
+# aws_session_token = 'YOUR_SESSION_TOKEN'  # If applicable
+# # Create an S3 client with your credentials
+# s3 = boto3.client('s3', 
+#                   aws_access_key_id=aws_access_key_id, 
+#                   aws_secret_access_key=aws_secret_access_key, 
+#                   )
 
 
 # List all buckets
@@ -105,7 +109,6 @@ def upload_file(file_name, bucket_name, object_name=None):
     except Exception as e:
         print(f'Upload failed: {e}')
 
-app = Flask(__name__)
 
 def delete_file(bucket_name, object_name):
     try:
@@ -130,14 +133,13 @@ model = CLIPModel. from_pretrained(model_id) . to(device)
 tokenizer = CLIPTokenizerFast. from_pretrained(model_id)
 processor = CLIPProcessor. from_pretrained(model_id)
 
-import weaviate
-import os
 
 with weaviate.connect_to_wcs(
-    cluster_url=os.getenv("WEAVIATE_CLUSTER_URL", "https://ccc-q2m6s9m3.weaviate.network"),  # Replace with your WCS URL
-    auth_credentials=weaviate.auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY", "imlIdfNFZ8eC6rm4iCvSrTJyQeoBo6KjQtLT"))  # Replace with your WCS key
+    cluster_url=os.getenv("WEAVIATE_CLUSTER_URL", "https://sample-grii9c8s.weaviate.network"),  # Replace with your WCS URL
+    auth_credentials=weaviate.auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY", "tDxrpMuztqejTKmuLrXdBcywkllshSavF9hD"))  # Replace with your WCS key
 ) as client:  # Use this context manager to ensure the connection is closed
     print(client.is_ready())
+
 
 
 def finder(keyword):
@@ -163,9 +165,58 @@ def finder(keyword):
 
     return outs
 
+
+
+
+
+def split_video_into_scenes(video_path, threshold=27.0):
+    # Open our video, create a scene manager, and add a detector.
+    video = open_video(video_path) ## to get the video from video path
+    scene_manager = SceneManager() 
+    scene_manager.add_detector(
+        ContentDetector(threshold=35.0))  ## add/register a Scenedetector(here contentdetector) to run when scene detect is called.
+    scene_manager.detect_scenes(video, show_progress=True,frame_skip =0) # frame_skip=0 by default
+    scene_list = scene_manager.get_scene_list()
+    split_video=split_video_ffmpeg(video_path, scene_list, show_progress=True)
+    print("Number of Scenes: ",len(scene_list))
+    #display the detected scene details
+    scenes = []
+    cap = cv2.VideoCapture(video_path)
+    for i, scene in enumerate(scene_list):
+        # print('    Scene %2d:  Start %s /  Frame %d, End %s / Frame %d' % (
+        #     i+1,
+        #     scene[0].get_timecode(), scene[0].get_frames(),
+        #     scene[1].get_timecode(), scene[1].get_frames(),))
+        # Get a random frame from the scene
+        random_frame = random.randint(scene[0].get_frames(), scene[1].get_frames())
+        cap.set(cv2.CAP_PROP_POS_FRAMES, random_frame)
+        ret, frame = cap.read()
+        # Save the frame as an image file
+        frame_file = f"{video_path}frame_{i+1}.jpg"
+        cv2.imwrite(frame_file, frame)
+        scenes.append({
+            'scene_number': i+1,
+            'start_time': scene[0].get_timecode(),
+            'end_time': scene[1].get_timecode(),
+            'random_frame': random_frame,
+            'frame_file': frame_file
+        })
+        img_embedder([f"./{frame_file}"],[f"frame_{i+1}.jpg"])
+    # print(type(split_video))
+    # print(split_video)
+    cap.release()
+    # image_files = [scene['frame_file'] for scene in scenes]
+    # image_names = [f"Scene {scene['scene_number']}" for scene in scenes]
+    return json.dumps(scenes)
+
+
+app = Flask(__name__)
+
+
 @app.route("/")
 def upload():
-    return upload_file('Moana.mp4', 'invideosearchbucket')
+    return "Hello"
+    # return upload_file('Moana.mp4', 'invideosearchbucket')
 
 @app.route("/delete")
 def delete():
@@ -173,9 +224,34 @@ def delete():
 
 @app.route("/convert")
 def convert():
-    img_embedder(['./bird.jpg'],['ImageBird2'])
+    img_embedder(['./frame_10.jpg'],['frameo10'])
     return "True"
 
-@app.route("/search")
-def search():
-    return finder("hill")
+@app.route("/search/<string:search_term>")
+def search(search_term):
+    return finder(search_term)
+
+# @app.route("/videoSplitter")
+# def split():
+#     return split_video_into_scenes("Moana.mp4")
+
+
+@app.route("/videoSplitter", methods=['POST'])
+def split():
+    if 'file' not in request.files:
+        return "No file part"
+    
+    file = request.files['file']
+    if file.filename == '':
+        return "No selected file"
+    
+    # Save the uploaded file
+    video_path = file.filename+"_"+str(time.time())+"_"
+    video_name = file.filename
+
+    file.save(video_path)
+    
+    # Process the uploaded file (e.g., save it, pass it to the splitting function)
+    return split_video_into_scenes(video_path)
+
+
