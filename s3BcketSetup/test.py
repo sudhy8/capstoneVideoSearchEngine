@@ -141,8 +141,8 @@ processor = CLIPProcessor. from_pretrained(model_id)
 
 
 with weaviate.connect_to_wcs(
-    cluster_url=os.getenv("WEAVIATE_CLUSTER_URL", "https://sample-grii9c8s.weaviate.network"),  # Replace with your WCS URL
-    auth_credentials=weaviate.auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY", "tDxrpMuztqejTKmuLrXdBcywkllshSavF9hD"))  # Replace with your WCS key
+    cluster_url=os.getenv("WEAVIATE_CLUSTER_URL", "https://invideosearchdatabase-ofdcggdz.weaviate.network"),  # Replace with your WCS URL
+    auth_credentials=weaviate.auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY", "RrEfkxI3DDYZ1TXgxnOCO1UStvHptdLOUvVk"))  # Replace with your WCS key
 ) as client:  # Use this context manager to ensure the connection is closed
     print(client.is_ready())
 
