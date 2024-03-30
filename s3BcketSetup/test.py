@@ -5,6 +5,13 @@ import json
 from flask import request
 import time
 import boto3
+import glob
+import os
+
+from dotenv import load_dotenv
+load_dotenv()
+aws_access_key_id = os.getenv('S3_ACCESS_KEY')
+aws_secret_access_key = os.getenv('S3_SECRET')
 
 from scenedetect import open_video, SceneManager, split_video_ffmpeg
 from scenedetect.detectors import ContentDetector
@@ -12,7 +19,6 @@ from scenedetect.video_splitter import split_video_ffmpeg
 import cv2
 import random
 from PIL import Image
-import os
 
 from transformers import PreTrainedTokenizerFast, CLIPProcessor, CLIPModel
 import torch
@@ -32,7 +38,7 @@ processor = CLIPProcessor.from_pretrained(model_id)
 
 
 
-def img_embedder(images, names):
+def img_embedder(images, meta):
         client.connect()
 
         batch_size = 16
@@ -63,14 +69,18 @@ def img_embedder(images, names):
                 image_arr += [batch_emb]
 
         videoSearch = client.collections.get("VideoSearch")
-        for i in zip(image_arr, names):
-            uuid = videoSearch.data.insert(
-                {
-                    "name": i[1]
-                },
+        uuid = videoSearch.data.insert(
+                meta,
                 vector=image_arr
             )
-            print(uuid)
+        # for i in zip(image_arr, meta):
+        #     uuid = videoSearch.data.insert(
+        #         {
+        #             "name": i[1]
+        #         },
+        #         vector=image_arr
+        #     )
+        print(uuid)
         print("Completed")
         
 
@@ -78,15 +88,11 @@ def img_embedder(images, names):
         
 
 
-# Specify your AWS credentials
-# aws_access_key_id = 'AKIAXYKJWO4T5XRXMZ3A'
-# aws_secret_access_key = 'ESjsmIjVA77qPIWtsE7AtljYR5Ri6rXFfAvw0iLo'
-# aws_session_token = 'YOUR_SESSION_TOKEN'  # If applicable
-# # Create an S3 client with your credentials
-# s3 = boto3.client('s3', 
-#                   aws_access_key_id=aws_access_key_id, 
-#                   aws_secret_access_key=aws_secret_access_key, 
-#                   )
+# Create an S3 client with your credentials
+s3 = boto3.client('s3', 
+                  aws_access_key_id=aws_access_key_id, 
+                  aws_secret_access_key=aws_secret_access_key, 
+                  )
 
 
 # List all buckets
@@ -154,24 +160,28 @@ def finder(keyword):
 
     response = names.query.near_vector(
             near_vector=list(text_emb[0]),
-            limit=4,
+            limit=10,
             return_metadata=wvc.query.MetadataQuery(certainty=True)
         )
+    print(response)
     outs=""
     for obj in response.objects:
-        name = obj.properties['name']
-        outs=outs+" "+name
-        print(f"Name: {name}")
+        video_name = obj.properties['video_name'] or "None"
 
-    return outs
+        outs=outs+" "+video_name
+        print(f"video_name:{video_name}")
 
-
-
+    return "Searched"
 
 
-def split_video_into_scenes(video_path, threshold=27.0):
+
+
+
+def split_video_into_scenes(video_path, video_name,threshold=27.0):
     # Open our video, create a scene manager, and add a detector.
     video = open_video(video_path) ## to get the video from video path
+    upload_file(video_path,'invideosearchbucket')
+    # return str(video_path)
     scene_manager = SceneManager() 
     scene_manager.add_detector(
         ContentDetector(threshold=35.0))  ## add/register a Scenedetector(here contentdetector) to run when scene detect is called.
@@ -201,12 +211,23 @@ def split_video_into_scenes(video_path, threshold=27.0):
             'random_frame': random_frame,
             'frame_file': frame_file
         })
-        img_embedder([f"./{frame_file}"],[f"frame_{i+1}.jpg"])
+        upload_file(frame_file,'invideosearchbucket',frame_file)
+        img_embedder([f"./{frame_file}"],{
+            'scene_number': i+1,
+            'start_time': scene[0].get_timecode(),
+            'end_time': scene[1].get_timecode(),
+            'random_frame': random_frame,
+            'frame_file': frame_file,
+            'video_name':video_name
+        })
     # print(type(split_video))
     # print(split_video)
     cap.release()
     # image_files = [scene['frame_file'] for scene in scenes]
     # image_names = [f"Scene {scene['scene_number']}" for scene in scenes]
+
+   
+   
     return json.dumps(scenes)
 
 
@@ -222,10 +243,10 @@ def upload():
 def delete():
     return delete_file('invideosearchbucket','Moana.mp4')
 
-@app.route("/convert")
-def convert():
-    img_embedder(['./frame_10.jpg'],['frameo10'])
-    return "True"
+# @app.route("/convert")
+# def convert():
+#     img_embedder(['./frame_10.jpg'],['frameo10'])
+#     return "True"
 
 @app.route("/search/<string:search_term>")
 def search(search_term):
@@ -246,12 +267,12 @@ def split():
         return "No selected file"
     
     # Save the uploaded file
-    video_path = file.filename+"_"+str(time.time())+"_"
+    video_path = "___"+str(time.time())+"___"+file.filename
     video_name = file.filename
 
     file.save(video_path)
     
     # Process the uploaded file (e.g., save it, pass it to the splitting function)
-    return split_video_into_scenes(video_path)
+    return split_video_into_scenes(video_path,video_name)
 
 
