@@ -141,8 +141,8 @@ processor = CLIPProcessor. from_pretrained(model_id)
 
 
 with weaviate.connect_to_wcs(
-    cluster_url=os.getenv("WEAVIATE_CLUSTER_URL", "https://invideosearchdatabase-ofdcggdz.weaviate.network"),  # Replace with your WCS URL
-    auth_credentials=weaviate.auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY", "RrEfkxI3DDYZ1TXgxnOCO1UStvHptdLOUvVk"))  # Replace with your WCS key
+    cluster_url=os.getenv("WEAVIATE_CLUSTER_URL", "https://invideosearch-15l6d80m.weaviate.network"),  # Replace with your WCS URL
+    auth_credentials=weaviate.auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY", "sNScwaTSzys0buVvfzhkQqnGsejVrMPmLDUF"))  # Replace with your WCS key
 ) as client:  # Use this context manager to ensure the connection is closed
     print(client.is_ready())
 
@@ -164,14 +164,11 @@ def finder(keyword):
             return_metadata=wvc.query.MetadataQuery(certainty=True)
         )
     print(response)
-    outs=""
+    outs=[]
     for obj in response.objects:
-        video_name = obj.properties['video_name'] or "None"
+        outs.append(obj.properties)
 
-        outs=outs+" "+video_name
-        print(f"video_name:{video_name}")
-
-    return "Searched"
+    return json.dumps(outs)
 
 
 
@@ -218,7 +215,8 @@ def split_video_into_scenes(video_path, video_name,threshold=27.0):
             'end_time': scene[1].get_timecode(),
             'random_frame': random_frame,
             'frame_file': frame_file,
-            'video_name':video_name
+            'video_name':video_name,
+            'video_path':video_path
         })
     # print(type(split_video))
     # print(split_video)
