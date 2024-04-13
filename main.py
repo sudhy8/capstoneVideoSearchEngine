@@ -13,7 +13,7 @@ from threading import Thread, Event
 
 from dotenv import load_dotenv
 load_dotenv()
-aws_access_key_id = "AKIAXYKJWO4TVZYEHDFO"
+aws_access_key_id = ""
 aws_secret_access_key = "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"
 
 
