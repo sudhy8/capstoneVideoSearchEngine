@@ -1,12 +1,14 @@
-from flask import Flask
-import numpy as np
-from sklearn.preprocessing import Binarizer
+
 import json
 from flask import request
 import time
 import boto3
-import glob
 import os
+
+from flask import Flask, Response
+from flask_cors import CORS
+from threading import Thread, Event
+
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -68,7 +70,7 @@ def img_embedder(images, meta):
             else:
                 image_arr += [batch_emb]
 
-        videoSearch = client.collections.get("VideoSearch")
+        videoSearch = client.collections.get("videoSearch")
         uuid = videoSearch.data.insert(
                 meta,
                 vector=image_arr
@@ -83,28 +85,16 @@ def img_embedder(images, meta):
         print(uuid)
         print("Completed")
         
-
-# img_embedder(images, names)
-        
-
-
-# Create an S3 client with your credentials
 s3 = boto3.client('s3', 
                   aws_access_key_id=aws_access_key_id, 
                   aws_secret_access_key=aws_secret_access_key, 
                   )
 
 
-# List all buckets
-# response = s3.list_buckets()
-
-# Print out the bucket names
-# print('Existing buckets:')
-# for bucket in response['Buckets']:
-#     print(f'  {bucket["Name"]}')
-
 
 def upload_file(file_name, bucket_name, object_name=None):
+    print("Uploading....")
+
     if object_name is None:
         object_name = file_name
     try:
@@ -141,8 +131,8 @@ processor = CLIPProcessor. from_pretrained(model_id)
 
 
 with weaviate.connect_to_wcs(
-    cluster_url=os.getenv("WEAVIATE_CLUSTER_URL", "https://invideosearch-15l6d80m.weaviate.network"),  # Replace with your WCS URL
-    auth_credentials=weaviate.auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY", "sNScwaTSzys0buVvfzhkQqnGsejVrMPmLDUF"))  # Replace with your WCS key
+    cluster_url=os.getenv("WEAVIATE_CLUSTER_URL", "https://abc-kafovg9r.weaviate.network"),  # Replace with your WCS URL
+    auth_credentials=weaviate.auth.AuthApiKey(os.getenv("WEAVIATE_API_KEY", "PV9tF7D2QbZZBQaeTbPNMWs4iz4Ey10kqHc9"))  # Replace with your WCS key
 ) as client:  # Use this context manager to ensure the connection is closed
     print(client.is_ready())
 
@@ -160,10 +150,10 @@ def finder(keyword):
 
     response = names.query.near_vector(
             near_vector=list(text_emb[0]),
-            limit=10,
+            limit=100,
             return_metadata=wvc.query.MetadataQuery(certainty=True)
         )
-    print(response)
+    # print(response)
     outs=[]
     for obj in response.objects:
         outs.append(obj.properties)
@@ -177,7 +167,6 @@ def finder(keyword):
 def split_video_into_scenes(video_path, video_name,threshold=27.0):
     # Open our video, create a scene manager, and add a detector.
     video = open_video(video_path) ## to get the video from video path
-    upload_file(video_path,'invideosearchbucket')
     # return str(video_path)
     scene_manager = SceneManager() 
     scene_manager.add_detector(
@@ -226,33 +215,27 @@ def split_video_into_scenes(video_path, video_name,threshold=27.0):
 
    
    
-    return json.dumps(scenes)
+    # return json.dumps(scenes)
+    upload_file(video_path,'invideosearchbucket')
+
+    return "completed"
+
 
 
 app = Flask(__name__)
+CORS(app)
 
+# Flag to track if the stream should be stopped
+stop_stream = Event()
 
 @app.route("/")
 def upload():
     return "Hello"
-    # return upload_file('Moana.mp4', 'invideosearchbucket')
-
-@app.route("/delete")
-def delete():
-    return delete_file('invideosearchbucket','Moana.mp4')
-
-# @app.route("/convert")
-# def convert():
-#     img_embedder(['./frame_10.jpg'],['frameo10'])
-#     return "True"
 
 @app.route("/search/<string:search_term>")
 def search(search_term):
     return finder(search_term)
 
-# @app.route("/videoSplitter")
-# def split():
-#     return split_video_into_scenes("Moana.mp4")
 
 
 @app.route("/videoSplitter", methods=['POST'])
@@ -274,3 +257,133 @@ def split():
     return split_video_into_scenes(video_path,video_name)
 
 
+def stop_stream_after_10_seconds():
+    stop_stream.wait(3)
+    stop_stream.set()
+
+@app.route('/stream')
+def stream():
+    if stop_stream.is_set():
+        stop_stream.clear()
+
+    def generate_data():
+        while not stop_stream.is_set():
+            data = {
+                'time': time.time(),
+                'value': 10 * (1 + 0.1 * (time.time() % 10))
+            }
+            yield f"data: {json.dumps(data)}\n\n"
+            time.sleep(1)
+
+    # Start the thread to stop the stream after 10 seconds
+    stop_stream_thread = Thread(target=stop_stream_after_10_seconds)
+    stop_stream_thread.start()
+
+    return Response(generate_data(), mimetype='text/event-stream')
+
+
+import boto3
+from datetime import datetime
+import json
+
+@app.route("/randomVideos",methods=['GET'])
+def findLatest():
+# List the objects in the bucket, filtering for MP4 files
+    response = s3.list_objects_v2(Bucket='invideosearchbucket')
+    print("response:",response) 
+    mp4_files = [obj for obj in response.get('Contents', []) if obj['Key'].endswith('.mp4')]
+
+    # Sort the MP4 files by last modified date in descending order
+    mp4_files.sort(key=lambda x: x['LastModified'], reverse=True)
+
+    # Get the latest 20 MP4 files
+    latest_mp4_files = []
+    for obj in mp4_files[:20]:
+        # Generate a presigned URL for the object
+        url = s3.generate_presigned_url(
+            ClientMethod='get_object',
+            Params={
+                'Bucket': 'invideosearchbucket',
+                'Key': obj['Key']
+            }
+        )
+        latest_mp4_files.append({
+            'key': obj['Key'],
+            'url': url,
+            'last_modified': obj['LastModified'].strftime('%Y-%m-%d %H:%M:%S')
+        })
+
+    # Convert the list of latest MP4 files to a JSON response
+    json_response = json.dumps(latest_mp4_files, indent=2)
+    return json_response
+
+@app.route("/videoSplitter2", methods=['POST'])
+def split2():
+    if 'file' not in request.files:
+        return "No file part"
+    
+    file = request.files['file']
+    if file.filename == '':
+        return "No selected file"
+    
+    # Save the uploaded file
+    video_path = "___"+str(time.time())+"___"+file.filename
+    video_name = file.filename
+
+    file.save(video_path)
+    
+    # Process the uploaded file (e.g., save it, pass it to the splitting function)
+    return Response(split_video_into_scenes2(video_path, video_name), mimetype='text/event-stream')
+
+def split_video_into_scenes2(video_path, video_name,threshold=27.0):
+    # Open our video, create a scene manager, and add a detector.
+    video = open_video(video_path) ## to get the video from video path
+    yield "Starting upload_file(video_path,'invideosearchbucket')"
+    upload_file(video_path,'invideosearchbucket')
+    yield "Finished upload_file(video_path,'invideosearchbucket')"
+    
+    scene_manager = SceneManager() 
+    yield "Starting scene_manager.add_detector(ContentDetector(threshold=35.0))"
+    scene_manager.add_detector(ContentDetector(threshold=35.0))  ## add/register a Scenedetector(here contentdetector) to run when scene detect is called.
+    yield "Finished scene_manager.add_detector(ContentDetector(threshold=35.0))"
+    
+    scene_manager.detect_scenes(video, show_progress=True,frame_skip =0) # frame_skip=0 by default
+    scene_list = scene_manager.get_scene_list()
+    split_video=split_video_ffmpeg(video_path, scene_list, show_progress=True)
+    yield f"Number of Scenes: {len(scene_list)}"
+    
+    #display the detected scene details
+    scenes = []
+    cap = cv2.VideoCapture(video_path)
+    yield "Starting for i, scene in enumerate(scene_list):"
+    for i, scene in enumerate(scene_list):
+        # Get a random frame from the scene
+        random_frame = random.randint(scene[0].get_frames(), scene[1].get_frames())
+        cap.set(cv2.CAP_PROP_POS_FRAMES, random_frame)
+        ret, frame = cap.read()
+        # Save the frame as an image file
+        frame_file = f"{video_path}frame_{i+1}.jpg"
+        cv2.imwrite(frame_file, frame)
+        scenes.append({
+            'scene_number': i+1,
+            'start_time': scene[0].get_timecode(),
+            'end_time': scene[1].get_timecode(),
+            'random_frame': random_frame,
+            'frame_file': frame_file
+        })
+        upload_file(frame_file,'invideosearchbucket',frame_file)
+        img_embedder([f"./{frame_file}"],{
+            'scene_number': i+1,
+            'start_time': scene[0].get_timecode(),
+            'end_time': scene[1].get_timecode(),
+            'random_frame': random_frame,
+            'frame_file': frame_file,
+            'video_name':video_name,
+            'video_path':video_path
+        })
+    yield "Finished for i, scene in enumerate(scene_list):"
+    
+    cap.release()
+    # image_files = [scene['frame_file'] for scene in scenes]
+    # image_names = [f"Scene {scene['scene_number']}" for scene in scenes]
+    yield split_video

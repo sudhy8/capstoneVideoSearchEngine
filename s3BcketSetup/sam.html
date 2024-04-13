@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stream Data</title>
+</head>
+<body>
+    <h1>Stream Data</h1>
+    <div id="data-container"></div>
+    <button id="startButton">Start Stream</button>
+
+    <script>
+
+        let eventSource;
+
+        document.getElementById('startButton').addEventListener('click', () => {
+            startStream();
+        });
+
+        function startStream() {
+
+            eventSource = new EventSource('http://127.0.0.1:5000/stream');
+
+            eventSource.addEventListener('message',messageHandler );
+
+            function messageHandler(event) {
+                console.log("-----------",event)
+            }
+            function errorHandler(event) {
+                console.log(event.target.readyState)
+                if (event.target.readyState === 0) {
+                    console.log('Stream has been stopped.');
+                    eventSource.close();
+
+                    eventSource.removeEventListener('message', messageHandler);
+                    eventSource.removeEventListener('error', errorHandler);
+                    eventSource.close();
+                    
+                } else {
+                    console.error('Error occurred while streaming data:', event);
+                }
+            }
+
+            eventSource.addEventListener('error',errorHandler );
+        }
+    </script>
+</body>
+</html>
